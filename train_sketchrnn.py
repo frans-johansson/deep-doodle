@@ -1,12 +1,14 @@
+import datetime as dt
 import argparse
 import pathlib
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from model import device
 from model.basic import SketchRNN
 from model.loss import sketch_rnn_loss
 from utils.data import load_quickdraw_data
-from utils.loops import train_loop
+from utils.loops import train_loop, eval_loop
 
 
 def handle_arguments():
@@ -55,6 +57,13 @@ def handle_arguments():
         default="data/quickdraw",
     )
     argparser.add_argument(
+        "-o",
+        help="Output directory to place the model files when done with training",
+        dest="output_dir",
+        type=str,
+        default="data/models",
+    )
+    argparser.add_argument(
         "-Eh",
         help="Size of the hidden latent space of the encoder",
         dest="enc_hidden",
@@ -94,6 +103,7 @@ if __name__ == "__main__":
     learning_rate = args.learning_rate
     dropout = args.dropout
     data_dir = args.data_dir
+    output_dir = args.output_dir
     enc_hidden = args.enc_hidden
     Nz = args.Nz
     dec_hidden = args.dec_hidden
@@ -102,13 +112,20 @@ if __name__ == "__main__":
     # TODO: Consider moving to the argparser at some point
     W_kl = 1.0
     clip_gradients = 1.0
+    loss_dir = "data/loss"
 
-    # Set up dataset and loader for training
+    # Set up datasets and loaders for training, testing and validating 
     data_path = pathlib.Path(data_dir) / pathlib.Path(f"sketchrnn_{class_name}.npz")
-    train_data, _, _ = load_quickdraw_data(data_path)
+    train_data, test_data, valid_data = load_quickdraw_data(data_path)
     train_loader = DataLoader(
         train_data, batch_size=batch_size, shuffle=True, pin_memory=("cuda" in device)
-    )  # Choo-chooo c:
+    )
+    test_loader = DataLoader(
+        test_data, batch_size=len(test_data), pin_memory=("cuda" in device)
+    )
+    valid_loader = DataLoader(
+        valid_data, batch_size=len(valid_data), pin_memory=("cuda" in device)
+    )
 
     # Set up model and optimizers
     model = SketchRNN(
@@ -123,12 +140,46 @@ if __name__ == "__main__":
     dec_optimizer = torch.optim.Adam(model.decoder.parameters(), lr=learning_rate)
     loss_fn = sketch_rnn_loss(W_kl)
 
-    # Run the training loop
-    train_loop(
-        train_loader,
+    # Keep track of losses for visualization
+    valid_losses = []
+    train_losses = []
+
+    # Run the training and validation loops
+    for epoch in range(num_epochs):
+        print()
+
+        epoch_losses = train_loop(
+            train_loader,
+            model,
+            loss_fn,
+            [enc_optimizer, dec_optimizer],
+            epoch,
+            clip_gradients
+        )
+        valid_loss = eval_loop(
+            valid_loader,
+            model,
+            loss_fn
+        )
+        
+        print(f"Validation loss: {valid_loss:.3f}")
+        valid_losses += [valid_loss] * batch_size
+        train_losses += epoch_losses
+    
+    # Final test score
+    test_loss = eval_loop(
+        test_loader,
         model,
-        loss_fn,
-        [enc_optimizer, dec_optimizer],
-        num_epochs,
-        clip_gradients
+        loss_fn
     )
+    print(f"Test loss: {test_loss:.3f}")
+
+    # Save the model, encoder and decoder separately
+    timestamp = dt.datetime.now().strftime("%d%m%y_%H%M")
+    torch.save(model, pathlib.Path(output_dir) / pathlib.Path(f"sketchrnn_{timestamp}.pth"))
+    torch.save(model.encoder.state_dict(), pathlib.Path(output_dir) / pathlib.Path(f"encoder_{timestamp}.pth"))
+    torch.save(model.decoder.state_dict(), pathlib.Path(output_dir) / pathlib.Path(f"decoder_{timestamp}.pth"))
+
+    # Save the loss values for plotting
+    np.save(pathlib.Path(loss_dir) / pathlib.Path(f"train_{timestamp}.npy"), train_losses)
+    np.save(pathlib.Path(loss_dir) / pathlib.Path(f"valid_{timestamp}.npy"), valid_losses)
