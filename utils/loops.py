@@ -1,6 +1,7 @@
 """Training and testing loops defined for convenient reuse"""
 
 import torch.nn as nn
+from model import device
 
 
 def train_loop(dataloader, model, loss_fn, optimizers, num_epochs, print_every, clip_gradients):
@@ -14,7 +15,7 @@ def train_loop(dataloader, model, loss_fn, optimizers, num_epochs, print_every, 
         optimizers: A list of optimizers to use when training
         num_epochs: The number of epochs to run
         print_every: How often to log the loss value
-        clip_gradients: Clip gradients on the interval [-clip_gradients, clip_gradients] during training 
+        clip_gradients: Clip gradients on the interval [-clip_gradients, clip_gradients] during training
     """
     size = len(dataloader.dataset)
 
@@ -22,6 +23,8 @@ def train_loop(dataloader, model, loss_fn, optimizers, num_epochs, print_every, 
         print(f"\nEpoch {e+1}\n")
 
         for i, X in enumerate(dataloader):
+            X = X.to(device)
+
             # Reset the optimizers
             for optimizer in optimizers:
                 optimizer.zero_grad()

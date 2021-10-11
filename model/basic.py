@@ -3,6 +3,7 @@
 import torch
 import torch.nn as nn
 from model.components import Decoder, Encoder
+from model import device
 
 
 class SketchRNN(nn.Module):
@@ -55,7 +56,7 @@ class SketchRNN(nn.Module):
         """
         z, mu, sigma_hat = self.encoder(S)
         # Append the start of sequence vector to each item in the batch
-        sos = torch.stack([torch.tensor([0, 0, 1, 0, 0])] * S.shape[0])
+        sos = torch.stack([torch.tensor([0, 0, 1, 0, 0])] * S.shape[0]).to(device)
         decoder_S = torch.cat([sos.unsqueeze(1), S], dim=1)
         params = self.decoder(z, decoder_S)
 

@@ -108,7 +108,7 @@ if __name__ == "__main__":
     data_path = pathlib.Path(data_dir) / pathlib.Path(f"sketchrnn_{class_name}.npz")
     train_data, _, _ = load_quickdraw_data(data_path)
     train_loader = DataLoader(
-        train_data, batch_size=batch_size, shuffle=True
+        train_data, batch_size=batch_size, shuffle=True, pin_memory=("cuda" in device)
     )  # Choo-chooo c:
 
     # Set up model and optimizers

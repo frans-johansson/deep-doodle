@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 from numpy.random import default_rng
+from model import device
 
 rng = default_rng()
 
@@ -10,7 +11,7 @@ def sample_normal(mu, sigma):
     assert (
         mu.shape == sigma.shape
     ), "Mean and standard deviation must have the same length"
-    N = torch.from_numpy(rng.normal(0, 1, size=(mu.shape))).to(torch.float32)
+    N = torch.from_numpy(rng.normal(0, 1, size=(mu.shape))).to(torch.float32).to(device)
     return mu + sigma * N
 
 
@@ -43,7 +44,7 @@ def sample_stroke_offset(mu, sigma, rho):
         sigma: A two-dimensional vector of standard deviation values for dx and dy
         rho: A floating point value for the covariance between dx and dy
     """
-    cov = torch.diag(sigma)
+    cov = torch.diag(sigma).to(device)
     cov[1, 0] = cov[0, 1] = rho
     s = rng.multivariate_normal(mean=mu.detach(), cov=cov.detach())
     return torch.from_numpy(s)
@@ -57,7 +58,7 @@ def sample_pen_state(q):
         q: Categorical probability values (q1, q2, q3) for each of the outcomes of p
     """
     ohc = torch.distributions.OneHotCategorical(probs=q)
-    return ohc.sample()
+    return ohc.sample().to(device)
 
 
 def sample_stroke_gmm(params):
@@ -83,4 +84,4 @@ def sample_stroke_gmm(params):
     pen = sample_pen_state(params[-3:])
 
     # Concatenate into one stroke-5 tensor
-    return torch.cat([stroke, pen])
+    return torch.cat([stroke, pen]).to(device)

@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-
+from model import device
 
 class SketchDataset(Dataset):
     """
@@ -65,7 +65,7 @@ def separate_stroke_params(strokes):
     """
     S = strokes[..., :2]
     Ns = [
-        torch.all(S == torch.tensor([0, 0, 0, 0, 1]), dim=1).nonzero()[0].item()
+        torch.all(S == torch.tensor([0, 0, 0, 0, 1], device=device), dim=1).nonzero()[0].item()
         for S in strokes
     ]
     p = strokes[..., 2:]
@@ -84,7 +84,7 @@ def create_stroke_mask(Ns, seq_len):
     Returns:
         A (batch_size, seq_len) binary masking tensor
     """
-    mask = torch.zeros((len(Ns), seq_len))
+    mask = torch.zeros((len(Ns), seq_len), device=device)
     for i, length in enumerate(Ns):
         mask[i, :length] = 1
     return mask
