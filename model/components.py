@@ -62,6 +62,8 @@ class Decoder(nn.Module):
             num_mixtures: The number of Gaussian mixtures to inlcude in the sampling scheme
         """
         super(Decoder, self).__init__()
+        
+        self.num_layers = num_layers
 
         self.z2h = nn.Linear(
             in_features=z_dims,
@@ -91,7 +93,8 @@ class Decoder(nn.Module):
                 sequence vector. Should be (batch_size, seq_len+1, 5)
         """
         h = self.z2h(z)
-        h = torch.tanh(h).unsqueeze(0)  # Needs to be (1, batch_size, hidden_size)
+        h = torch.tanh(h)
+        h = torch.stack([h]*self.num_layers, dim=0)  # Needs to be (num_layers, batch_size, hidden_size)
         c = torch.zeros_like(h)
         z_stack = torch.stack([z] * S.shape[1], dim=1)
 
