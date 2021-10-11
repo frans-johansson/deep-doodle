@@ -100,7 +100,6 @@ if __name__ == "__main__":
     num_mixtures = args.num_mixtures
 
     # TODO: Consider moving to the argparser at some point
-    print_every = 1
     W_kl = 1.0
     clip_gradients = 1.0
 
@@ -131,6 +130,5 @@ if __name__ == "__main__":
         loss_fn,
         [enc_optimizer, dec_optimizer],
         num_epochs,
-        print_every,
         clip_gradients
     )
