@@ -5,7 +5,7 @@ from tqdm import tqdm
 from model import device
 
 
-def train_loop(dataloader, model, loss_fn, optimizers, num_epochs, clip_gradients):
+def train_loop(dataloader, model, loss_fn, optimizers, epoch, clip_gradients):
     """
     Runs the training loop on a given model for a certain number of epochs
 
@@ -14,34 +14,35 @@ def train_loop(dataloader, model, loss_fn, optimizers, num_epochs, clip_gradient
         model: The model to train
         loss_fn: A function which evaluates a single loss value given the output of `model`
         optimizers: A list of optimizers to use when training
-        num_epochs: The number of epochs to run
-        clip_gradients: Clip gradients on the interval [-clip_gradients, clip_gradients] during training
+        epoch: The current epoch
+        clip_gradients: Clip gradients on the interval [-clip_gradients, clip_gradients] during training,
+            set to `None` to disable
     """
+    
+    with tqdm(dataloader, unit="batch") as train_epoch:
+        for X in train_epoch:
+            train_epoch.set_description(f"Epoch {epoch}")
+            
+            # Make sure we have the training data on the right device
+            X = X.to(device)
 
-    for e in range(num_epochs):
-        with tqdm(dataloader, unit="batch") as train_epoch:
-            for X in train_epoch:
-                train_epoch.set_description(f"Epoch {e+1}")
-                
-                # Make sure we have the training data on the right device
-                X = X.to(device)
+            # Reset the optimizers
+            for optimizer in optimizers:
+                optimizer.zero_grad()
 
-                # Reset the optimizers
-                for optimizer in optimizers:
-                    optimizer.zero_grad()
+            # Forward step
+            Y = model(X)
 
-                # Forward step
-                Y = model(X)
+            # Compute loss and run the backwards step
+            loss = loss_fn(X, Y)
+            loss.backward()
 
-                # Compute loss and run the backwards step
-                loss = loss_fn(X, Y)
-                loss.backward()
-
-                # Gradient clipping
+            # Gradient clipping
+            if clip_gradients:
                 nn.utils.clip_grad_value_(model.parameters(), clip_gradients)
 
-                # Let the optimizers do their magic using the information from the backwards step
-                for optimizer in optimizers:
-                    optimizer.step()
+            # Let the optimizers do their magic using the information from the backwards step
+            for optimizer in optimizers:
+                optimizer.step()
 
-                train_epoch.set_postfix(loss=loss.item())
+            train_epoch.set_postfix(loss=loss.item())
