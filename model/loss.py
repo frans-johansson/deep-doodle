@@ -87,16 +87,16 @@ def stroke_loss(S, mask, params):
     """
     N_max = S.shape[1]
 
-    # These need to be (batch_size, 1, seq_len)
-    dx = S[..., 0].unsqueeze(1)
-    dy = S[..., 1].unsqueeze(1)
+    # These need to be (batch_size, seq_len, 1)
+    dx = S[..., 0].unsqueeze(-1)
+    dy = S[..., 1].unsqueeze(-1)
 
     # Evaluate the PDF for each mixture component in each stroke and batch
     pdf = bivariate_normal_pdf(*params[1:])
     likelihoods = pdf(dx, dy)
 
     # Compute and return the loss
-    loss = torch.sum(mask*torch.log(1e-5 + torch.sum(params[0] * likelihoods, dim=1)), dim=1)
+    loss = torch.sum(mask*torch.log(1e-5 + torch.sum(params[0] * likelihoods, dim=2)), dim=1)
     loss /= (-1 * N_max)
     return torch.mean(loss)
 

@@ -26,12 +26,12 @@ def normalized_gmm_params(params):
     Returns:
         pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy
     """
-    pi = F.softmax(params[..., 0], dim=1)
-    mu_x = params[..., 1]
-    mu_y = params[..., 2]
-    sigma_x = torch.exp(params[..., 3])
-    sigma_y = torch.exp(params[..., 4])
-    rho_xy = torch.tanh(params[..., 5])
+    pi = F.softmax(params[..., 0], dim=1).transpose(1, 2)
+    mu_x = params[..., 1].transpose(1, 2)
+    mu_y = params[..., 2].transpose(1, 2)
+    sigma_x = torch.exp(params[..., 3]).transpose(1, 2)
+    sigma_y = torch.exp(params[..., 4]).transpose(1, 2)
+    rho_xy = torch.tanh(params[..., 5]).transpose(1, 2)
     return pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy
 
 
@@ -61,27 +61,39 @@ def sample_pen_state(q):
     return ohc.sample().to(device)
 
 
-def sample_stroke_gmm(params):
+def sample_stroke_gmm(weights, mu_x, mu_y, sigma_x, sigma_y, rho_xy, q):
     """
     Samples a stroke offset dx and dy from a GMM with M mixture components.
 
     Args:
-        params: A tensor of parameter values for a single GMM along with the three
-            categorical probabilities q1, q2, q3 for the pen state. Organized as follows
-            [(weight, mu_x, mu_y, sigma_x, sigma_y, rho_xy), (...), q1, q2, q3], where each
-            of the () denotes one mixture in the GMM
+        TODO: Add args
     """
     # Select one of the mixtures by their weights
-    weights = params[:-3:6]
     c = torch.distributions.Categorical(probs=weights)
-    # Offset into the params tensor for the selected mixture
-    m = c.sample() * 6
+    m = c.sample()
 
     # Handle the sampling
+    mu = torch.cat([mu_x[m], mu_y[m]])
+    sigma = torch.cat([sigma_x[m], sigma_y[m]])
+    
     stroke = sample_stroke_offset(
-        mu=params[m + 1 : m + 3], sigma=params[m + 3 : m + 5], rho=params[m + 5]
+        mu, sigma, rho_xy[m]
     )
-    pen = sample_pen_state(params[-3:])
+    pen = sample_pen_state(q)
 
     # Concatenate into one stroke-5 tensor
     return torch.cat([stroke, pen]).to(device)
+
+
+def sample_sketch(params):
+    """
+    Samples a complete sketch sequence from the parameters output by e.g. the SkethRNN model
+    
+    Args:
+        TODO: Add args
+    """
+    strokes = [
+        sample_stroke_gmm(weights, mu_x, mu_y, sigma_x, sigma_y, rho_xy, q)
+        for weights, mu_x, mu_y, sigma_x, sigma_y, rho_xy, q in params
+    ]
+

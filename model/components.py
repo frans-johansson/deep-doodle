@@ -87,6 +87,8 @@ class Decoder(nn.Module):
         """
         Runs the forward propagation step for one batch through the decoder
 
+        TODO: This should have different behaviour when self.training is False
+
         Args:
             z: A sampled latent vector of size (batch_size, z_dims)
             S: Ground truth padded stroke-5 data of size including the initial start of
@@ -111,6 +113,6 @@ class Decoder(nn.Module):
         pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy = normalized_gmm_params(gmm_params[:, :, :-1, :])
 
         # Normalize the pen parameters
-        q = F.softmax(pen_params[:, :-1, :], dim=1)
+        q = F.softmax(pen_params[:, :-1, :], dim=2)
 
         return pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy, q
