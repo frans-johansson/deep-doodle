@@ -5,10 +5,13 @@ Utilities relating to rendering SVG images from offset data
 import numpy as np
 import svgwrite as svg
 
+from utils.data import strokes_to_lines
+
 
 class CanvasGrid:
-    def __init__(self, filename, cell_size=255, nrows=1, ncols=1):
+    def __init__(self, filename, cell_size=255, nrows=1, ncols=1, padding=(50, 50)):
         self.cell_size = cell_size
+        self.padding = padding
         self.nrows = nrows
         self.ncols = ncols
         self.drw = svg.Drawing(filename, (cell_size * nrows, cell_size * ncols))
@@ -28,53 +31,40 @@ class CanvasGrid:
 
         return (self.cell_size * col, self.cell_size * row)
 
-    def _normalize_strokes(self, strokes, padding=(50, 50)):
-        x_min = np.array(strokes)[..., 0].min()
-        x_max = np.array(strokes)[..., 0].max()
-        y_min = np.array(strokes)[..., 1].min()
-        y_max = np.array(strokes)[..., 1].max()
+    def _normalize_lines(self, lines):
+        # Find the bounding box of the canvas for normalizing
+        xs = [x for line in lines for x, _ in line]
+        ys = [y for line in lines for _, y in line]
 
-        normalized_strokes = np.zeros_like(strokes)
+        min_x, max_x = (min(xs), max(xs))
+        min_y, max_y = (min(ys), max(ys))
 
-        # Rescale X
-        normalized_strokes[..., 0] = padding[0] + (self.cell_size - 2 * padding[0]) * (
-            strokes[..., 0] - x_min
-        ) / (x_max - x_min)
-        # Rescale Y
-        normalized_strokes[..., 1] = padding[1] + (self.cell_size - 2 * padding[1]) * (
-            strokes[..., 1] - y_min
-        ) / (y_max - y_min)
+        def _normalize(x, y):
+            res_x = self.padding[0] + (self.cell_size - 2 * self.padding[0]) * (
+                    x - min_x
+            ) / (max_x - min_x)
+            res_y = self.padding[1] + (self.cell_size - 2 * self.padding[1]) * (
+                    y - min_y
+            ) / (max_y - min_y)
+            return [res_x, res_y]
 
-        return normalized_strokes
+        return [[_normalize(x, y) for x, y in line] for line in lines]
 
-    def _render_strokes(self, strokes, row, col, color):
+    def _render_lines(self, lines, row, col, color):
         (dy, dx) = self._cell_offset(row, col)
 
-        for (xs, ys) in strokes.tolist():
-            p0 = (xs[0] + dx, ys[0] + dy)
-            p1 = (xs[1] + dx, ys[1] + dy)
-            self.drw.add(self.drw.line(p0, p1, stroke=color))
+        for line in lines:
+            for i in range(1, len(line)):
+                x0, y0 = line[i-1]
+                x1, y1 = line[i]
+                p0 = (x0 + dx, y0 + dy)
+                p1 = (x1 + dx, y1 + dy)
+                self.drw.add(self.drw.line(p0, p1, stroke=color))
 
-    def add_drawing(self, drawing_data, row, col, color="black"):
-        x = np.cumsum(
-            drawing_data, axis=0
-        )  # Transforms offsets into coordinates, still need to append/start at (0,0)
-        x = np.insert(x, 0, [0, 0, 0], axis=0)  # Should start in the origin
-        sections = np.unique(x[..., 2], return_index=True)[
-            1
-        ]  # Only care about the indices (second in tuple)
-        strokes = self._normalize_strokes(
-            x[..., :2]
-        )  # Normalize to fit within the output image
-        stroke_sections = np.split(strokes, sections, axis=0)[
-            1:
-        ]  # First element is always empty, discard this
-
-        # Render the strokes in each section
-        for section_strokes in stroke_sections:
-            self._render_strokes(
-                np.dstack([section_strokes[:-1], section_strokes[1:]]), row, col, color
-            )
+    def draw_strokes(self, strokes, row, col, color="black"):
+        lines = strokes_to_lines(strokes)
+        normalized = self._normalize_lines(lines)
+        self._render_lines(normalized, row, col, color)
 
     def save(self):
         self.drw.save()
