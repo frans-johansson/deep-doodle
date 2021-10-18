@@ -28,6 +28,16 @@ class SketchDataset(Dataset):
             for data in self.original_data
             if len(data) <= seq_len
         ]
+        self._normalize(self.model_data)
+
+    def _normalize(self, data):
+        xy = np.concatenate([line[..., :2] for line in data])
+        offsets = xy.reshape((-1))
+        std = np.std(offsets)
+        
+        for drawing in data:
+            drawing[..., :2] /= std
+    
 
     def __len__(self):
         """Returns the length, number of samples, of the loaded data"""
