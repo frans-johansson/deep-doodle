@@ -83,7 +83,7 @@ class Decoder(nn.Module):
             # as well as a categorical distribution with three categories
         )
 
-    def forward(self, z, S):
+    def forward(self, z, S, h_c=None):
         """
         Runs the forward propagation step for one batch through the decoder
 
@@ -93,15 +93,20 @@ class Decoder(nn.Module):
             z: A sampled latent vector of size (batch_size, z_dims)
             S: Ground truth padded stroke-5 data of size including the initial start of
                 sequence vector. Should be (batch_size, seq_len+1, 5)
+            h_c: Optional values for the hidden and cell states for the LSTM, should be given as a tuple.
+                These can be used for sampling from a trained model
         """
-        h = self.z2h(z)
-        h = torch.tanh(h)
-        h = torch.stack([h]*self.num_layers, dim=0)  # Needs to be (num_layers, batch_size, hidden_size)
-        c = torch.zeros_like(h)
-        z_stack = torch.stack([z] * S.shape[1], dim=1)
+        if h_c is None:  # Initialize from z
+            h = self.z2h(z)
+            h = torch.tanh(h)
+            h = torch.stack([h]*self.num_layers, dim=0)  # Needs to be (num_layers, batch_size, hidden_size)
+            c = torch.zeros_like(h)
+        else:
+            h, c = h_c
 
+        z_stack = torch.stack([z] * S.shape[1], dim=1)
         x = torch.cat([S, z_stack], dim=2)
-        y, _ = self.lstm(x, (h, c))
+        y, h_c = self.lstm(x, (h, c))
         params = self.y2params(y)
 
         # Separate into parameters for GMM and pen
@@ -110,9 +115,11 @@ class Decoder(nn.Module):
         pen_params = split_params[-1]  # (batch, stroke, 3)
         
         # Grab separate normalized GMM parameters
-        pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy = normalized_gmm_params(gmm_params[:, :, :-1, :])
+        # pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy = normalized_gmm_params(gmm_params[:, :, :-1, :])
+        pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy = normalized_gmm_params(gmm_params)
 
         # Normalize the pen parameters
-        q = F.softmax(pen_params[:, :-1, :], dim=2)
+        # q = F.softmax(pen_params[:, :-1, :], dim=2)
+        q = F.softmax(pen_params, dim=2)
 
-        return pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy, q
+        return (pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy, q), h_c

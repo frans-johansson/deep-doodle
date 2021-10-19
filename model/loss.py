@@ -3,7 +3,6 @@
 import numpy as np
 import torch
 from utils.data import create_stroke_mask, separate_stroke_params
-from utils.sampling import normalized_gmm_params
 from model import device
 
 
