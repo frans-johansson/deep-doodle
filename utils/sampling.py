@@ -15,26 +15,6 @@ def sample_normal(mu, sigma):
     return mu + sigma * N
 
 
-def normalized_gmm_params(params):
-    """
-    Returns a tuple of normalized GMM parameters given the unnormalized output of the SketchRNN model.
-    
-    Args:
-        params: The unnormalized GMM parameters output by e.g. the SketchRNN model. Should have shape
-            (batch, num_mixtures, seq_len, 6)
-
-    Returns:
-        pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy
-    """
-    pi = F.softmax(params[..., 0], dim=1).transpose(1, 2)
-    mu_x = params[..., 1].transpose(1, 2)
-    mu_y = params[..., 2].transpose(1, 2)
-    sigma_x = torch.exp(params[..., 3]).transpose(1, 2)
-    sigma_y = torch.exp(params[..., 4]).transpose(1, 2)
-    rho_xy = torch.tanh(params[..., 5]).transpose(1, 2)
-    return pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy
-
-
 def _sample_stroke_offset(mu, sigma, rho):
     """
     Sample the stroke offsets dx and dy from a multivariate normal distribution.

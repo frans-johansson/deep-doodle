@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils.sampling import normalized_gmm_params, sample_normal
+from utils.sampling import sample_normal
 
 
 class Encoder(nn.Module):
@@ -64,6 +64,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         
         self.num_layers = num_layers
+        self.t = 1.0  # Temperature parameter should be 1.0 by default
 
         self.z2h = nn.Linear(
             in_features=z_dims,
@@ -116,10 +117,35 @@ class Decoder(nn.Module):
         
         # Grab separate normalized GMM parameters
         # pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy = normalized_gmm_params(gmm_params[:, :, :-1, :])
-        pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy = normalized_gmm_params(gmm_params)
+        pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy = self._normalized_gmm_params(gmm_params)
 
         # Normalize the pen parameters
         # q = F.softmax(pen_params[:, :-1, :], dim=2)
-        q = F.softmax(pen_params, dim=2)
+        q = self._normalized_pen_params(pen_params)
 
         return (pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy, q), h_c
+    
+    def _normalized_pen_params(self, params):
+        """Returns a tensor of normalized pen state probabilities scaled by some temperature value"""
+        return F.softmax(params / self.t, dim=2)
+
+    def _normalized_gmm_params(self, params):
+        """
+        Returns a tuple of normalized GMM parameters given the unnormalized output of the SketchRNN model.
+
+        Args:
+            params: The unnormalized GMM parameters output by e.g. the SketchRNN model. Should have shape
+                (batch, num_mixtures, seq_len, 6)
+
+        Returns:
+            pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy
+        """
+        pi = F.softmax(params[..., 0] / self.t , dim=1).transpose(1, 2)
+        mu_x = params[..., 1].transpose(1, 2)
+        mu_y = params[..., 2].transpose(1, 2)
+        sigma_x = torch.exp(params[..., 3]).transpose(1, 2) / self.t
+        sigma_y = torch.exp(params[..., 4]).transpose(1, 2) / self.t
+        rho_xy = torch.tanh(params[..., 5]).transpose(1, 2)
+        return pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy
+
+    
