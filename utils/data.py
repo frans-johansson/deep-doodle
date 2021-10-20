@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.nn as nn
 from torch.utils.data import Dataset
 from model import device
 
@@ -46,6 +47,29 @@ class SketchDataset(Dataset):
     def __getitem__(self, index):
         """Returns the sample at the given index"""
         return self.model_data[index].astype("float32")
+
+
+class DataAugmentation(nn.Module):
+    """Handles data augmentation during training and does nothing during evaluation"""
+    
+    def __init__(self, scale_limits=(0.9, 1.1)):
+        """
+        Sets up a simple data augmentation layer
+        
+        Args:
+            scale_limits: An optional tuple of the lower and upper bound
+                of the random scale changes to the offsets in each data sample
+        """
+        super(DataAugmentation, self).__init__()
+        self.scale_limits = scale_limits
+
+    def forward(self, data):
+        if self.training:
+            low, high = self.scale_limits
+            random_scale = (torch.rand_like(data) * (high - low)) + low
+            random_scale[..., 2:] = 1.0
+            return data * random_scale
+        return data
 
 
 def load_quickdraw_data(path, seq_len=200):

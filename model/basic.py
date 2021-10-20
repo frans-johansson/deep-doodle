@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from model.components import Decoder, Encoder
 from model import device
+from utils.data import DataAugmentation
 
 
 class SketchRNN(nn.Module):
@@ -29,6 +30,7 @@ class SketchRNN(nn.Module):
         """
         super(SketchRNN, self).__init__()
 
+        self.augment = DataAugmentation()
         self.encoder = Encoder(
             hidden_size=enc_hidden,
             z_dims=z_dims,
@@ -54,6 +56,7 @@ class SketchRNN(nn.Module):
             params, mu, sigma_hat: The GMM and pen parameters for each of the strokes along with the mean
                 and unnormalized standard deviation of the latent space z.
         """
+        S = self.augment(S)
         z, mu, sigma_hat = self.encoder(S)
         # Append the start of sequence vector to each item in the batch
         sos = torch.stack([torch.tensor([0, 0, 1, 0, 0])] * S.shape[0]).to(device)
