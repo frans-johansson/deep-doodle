@@ -1,7 +1,8 @@
+from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, ConcatDataset
 from model import device
 
 class SketchDataset(Dataset):
@@ -72,9 +73,8 @@ class DataAugmentation(nn.Module):
         return data
 
 
-def load_quickdraw_data(path, seq_len=200):
-    """Creates and returns a train, test and validation dataset from the supplied .npz file"""
-    # TODO: Find a way to avoid hardcoding the max_len
+def _load_quickdraw_class(path, seq_len=200):
+    """Loads and returns (train, test, validation) sets for a single .npz file."""
 
     data = np.load(path, encoding="latin1", allow_pickle=True)
     return (
@@ -82,6 +82,26 @@ def load_quickdraw_data(path, seq_len=200):
         SketchDataset(data["test"], seq_len=seq_len),
         SketchDataset(data["valid"], seq_len=seq_len),
     )
+
+
+def load_quickdraw_data(classes, data_path="data/quickdraw", seq_len=200):
+    """
+    Creates and returns a train, test and validation dataset for one or more quickdraw classes
+    
+    Args:
+        classes: List of class names to load. These will map to .npz-files named 'sketchrnn_[classname].npz'
+            in the data directory
+        data_path: The data directory to load from. Defaults to 'data/quickdraw'.
+        seq_len: Maximum sequence length. Pads up to this length and discards samples longer than it.
+
+    Returns:
+        A tuple of concatenated training, testing and validation datasets, in that order
+    """
+    separate_datasets = [
+        _load_quickdraw_class(Path(data_path) / Path(f"sketchrnn_{class_name}.npz"), seq_len=seq_len)
+        for class_name in classes
+    ]
+    return tuple([ConcatDataset(datasets) for datasets in zip(*separate_datasets)])
 
 
 def separate_stroke_params(strokes):

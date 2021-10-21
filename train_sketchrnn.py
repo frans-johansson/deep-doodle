@@ -21,8 +21,9 @@ def handle_arguments():
 
     argparser.add_argument(
         "-c",
-        help="Class to train on. Will expect a sketchrnn_[class name].npz file located in the data directory",
-        dest="class_name",
+        help="Classes to train on. Will expect sketchrnn_[class name].npz files located in the data directory for each class",
+        dest="classes",
+        nargs="+",
         type=str,
     )
     argparser.add_argument(
@@ -97,7 +98,7 @@ def handle_arguments():
 if __name__ == "__main__":
     # Parse and retrieve arguments
     args = handle_arguments()
-    class_name = args.class_name
+    classes = args.classes
     num_epochs = args.num_epochs
     batch_size = args.batch_size
     learning_rate = args.learning_rate
@@ -114,9 +115,8 @@ if __name__ == "__main__":
     clip_gradients = 1.0
     loss_dir = "data/loss"
 
-    # Set up datasets and loaders for training, testing and validating 
-    data_path = pathlib.Path(data_dir) / pathlib.Path(f"sketchrnn_{class_name}.npz")
-    train_data, test_data, valid_data = load_quickdraw_data(data_path)
+    # Set up datasets and loaders for training, testing and validating
+    train_data, test_data, valid_data = load_quickdraw_data(classes, data_dir)
     train_loader = DataLoader(
         train_data, batch_size=batch_size, shuffle=True, pin_memory=("cuda" in device)
     )
