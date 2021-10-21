@@ -57,12 +57,11 @@ class SketchRNN(nn.Module):
             params, mu, sigma_hat: The GMM and pen parameters for each of the strokes along with the mean
                 and unnormalized standard deviation of the latent space z.
         """
-        S = self.augment(S)
         z, mu, sigma_hat = self.encoder(S)
         # Append the start of sequence vector to each item in the batch
         sos = torch.stack([torch.tensor([0, 0, 1, 0, 0])] * S.shape[0]).to(device)
-        decoder_S = torch.cat([sos.unsqueeze(1), S], dim=1)
-        params = self.decoder(z, decoder_S)
+        decoder_S = torch.cat([sos.unsqueeze(1), S[:, :-1, :]], dim=1)
+        params, _ = self.decoder(z, decoder_S)
 
         return params, mu, sigma_hat
 
