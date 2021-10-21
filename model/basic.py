@@ -5,6 +5,7 @@ import torch.nn as nn
 from model.components import Decoder, Encoder
 from model import device
 from utils.data import DataAugmentation
+from utils.sampling import sample_stroke
 
 
 class SketchRNN(nn.Module):
@@ -64,3 +65,33 @@ class SketchRNN(nn.Module):
         params = self.decoder(z, decoder_S)
 
         return params, mu, sigma_hat
+
+    def conditional_sample(self, input):
+        """
+        Generates one conditional sample from the model given a single input sketch.
+
+        Args:
+            input: A single input sketch, must be of shape (1, seq_len, 5) i.e. with a batch size of 1.
+
+        Returns:
+            A tensor of shape (1, seq_len, 5) with the sampled results in stroke-5 format.
+        """
+        self.encoder.eval()
+        self.decoder.eval()
+        
+        N = input.shape[1]  # Sequence length
+        z, _, _ = self.encoder(input)  # Encode the input
+        
+        stroke = torch.tensor([0, 0, 1, 0, 0])
+        h_c = (torch.zeros(2, 1, 512), torch.zeros(2, 1, 512))
+        samples = [stroke]
+
+        with torch.no_grad():
+            for _ in range(N):
+                S = stroke.unsqueeze(0).unsqueeze(0)
+                params, h_c = self.decoder(z, S, h_c)
+                params = tuple([param.squeeze(0).squeeze(0) for param in params])
+                stroke = sample_stroke(*params).to(torch.float32)
+                samples.append(stroke)
+
+        return torch.stack(samples)
