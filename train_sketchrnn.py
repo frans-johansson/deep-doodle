@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from model import device
 from model.basic import SketchRNN
 from model.loss import sketch_rnn_loss
-from utils.data import load_quickdraw_data
+from utils.data import DataAugmentation, load_quickdraw_data
 from utils.loops import train_loop, eval_loop
 
 
@@ -154,7 +154,8 @@ if __name__ == "__main__":
             loss_fn,
             [enc_optimizer, dec_optimizer],
             epoch,
-            clip_gradients
+            clip_gradients,
+            DataAugmentation()
         )
         valid_loss = eval_loop(
             valid_loader,

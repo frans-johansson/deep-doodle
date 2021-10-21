@@ -6,7 +6,7 @@ from tqdm import tqdm
 from model import device
 
 
-def train_loop(train_loader, model, loss_fn, optimizers, epoch, clip_gradients):
+def train_loop(train_loader, model, loss_fn, optimizers, epoch, clip_gradients, augment):
     """
     Runs the training loop on a given model for a certain number of epochs
 
@@ -18,6 +18,7 @@ def train_loop(train_loader, model, loss_fn, optimizers, epoch, clip_gradients):
         epoch: The current epoch (0 indexed)
         clip_gradients: Clip gradients on the interval [-clip_gradients, clip_gradients] during training,
             set to `None` to disable
+        augment: A `nn.Module` for data augmentation 
 
     Returns:
         A list of losses for each batch in this epoch
@@ -31,6 +32,7 @@ def train_loop(train_loader, model, loss_fn, optimizers, epoch, clip_gradients):
             
             # Make sure we have the training data on the right device
             X = X.to(device)
+            X = augment(X)
 
             # Reset the optimizers
             for optimizer in optimizers:

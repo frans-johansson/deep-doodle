@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 from model.components import Decoder, Encoder
 from model import device
-from utils.data import DataAugmentation
 from utils.sampling import sample_stroke
 
 
@@ -31,7 +30,6 @@ class SketchRNN(nn.Module):
         """
         super(SketchRNN, self).__init__()
 
-        self.augment = DataAugmentation()
         self.encoder = Encoder(
             hidden_size=enc_hidden,
             z_dims=z_dims,
