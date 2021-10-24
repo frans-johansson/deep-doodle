@@ -53,7 +53,7 @@ def train_loop(train_loader, model, loss_fn, optimizers, epoch, clip_gradients, 
             for optimizer in optimizers:
                 optimizer.step()
 
-            losses.append(loss.item())
+            losses.append(float(loss.item()))
             train_epoch.set_postfix(loss=loss.item())
 
     return losses
