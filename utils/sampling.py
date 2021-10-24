@@ -26,8 +26,10 @@ def _sample_stroke_offset(mu, sigma, rho):
     """
     cov = torch.diag(sigma).to(device)
     cov[1, 0] = cov[0, 1] = rho
-    s = rng.multivariate_normal(mean=mu.detach(), cov=cov.detach())
-    return torch.from_numpy(s)
+    # s = rng.multivariate_normal(mean=mu.cpu().detach(), cov=cov.cpu().detach())
+    s = torch.distributions.MultivariateNormal(loc=mu, scale_tril=torch.tril(cov)).sample()
+    # return torch.from_numpy(s)
+    return s
 
 
 def _sample_pen_state(q):
