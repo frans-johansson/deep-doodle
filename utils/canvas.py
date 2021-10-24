@@ -14,7 +14,7 @@ class CanvasGrid:
         self.padding = padding
         self.nrows = nrows
         self.ncols = ncols
-        self.drw = svg.Drawing(filename, (cell_size * nrows, cell_size * ncols))
+        self.drw = svg.Drawing(filename, (cell_size * ncols, cell_size * nrows))
 
         # Background color
         self.drw.add(
@@ -51,7 +51,7 @@ class CanvasGrid:
         return [[_normalize(x, y) for x, y in line] for line in lines]
 
     def _render_lines(self, lines, row, col, color):
-        (dy, dx) = self._cell_offset(row, col)
+        (dx, dy) = self._cell_offset(row, col)
 
         for line in lines:
             for i in range(1, len(line)):
