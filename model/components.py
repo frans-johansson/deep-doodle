@@ -27,6 +27,7 @@ class Encoder(nn.Module):
         """
         super(Encoder, self).__init__()
 
+        self.dropout = nn.Dropout(dropout)
         self.lstm = nn.LSTM(
             input_size=5,
             hidden_size=hidden_size,
@@ -41,6 +42,7 @@ class Encoder(nn.Module):
     def forward(self, x):
         y, _ = self.lstm(x)
         y = y[:, -1, :]  # Only care about the last output
+        y = self.dropout(y)
         mu = self.h2mu(y)
         sigma_hat = self.h2sigma(y)
         sigma = torch.exp(sigma_hat)
@@ -67,11 +69,12 @@ class Decoder(nn.Module):
         self.num_layers = num_layers
         self.t = 1.0  # Temperature parameter should be 1.0 by default
 
+        self.dropout = nn.Dropout(dropout)
         self.z2h = nn.Linear(
             in_features=z_dims,
             out_features=hidden_size
         )
-        self.lstm =  nn.LSTM(
+        self.lstm = nn.LSTM(
             input_size=5+z_dims,  # x = [S, z]
             hidden_size=hidden_size,
             num_layers=num_layers,
@@ -100,6 +103,7 @@ class Decoder(nn.Module):
         """
         if h_c is None:  # Initialize from z
             h = self.z2h(z)
+            h = self.dropout(h)
             h = torch.tanh(h)
             h = torch.stack([h]*self.num_layers, dim=0)  # Needs to be (num_layers, batch_size, hidden_size)
             c = torch.zeros_like(h)
@@ -109,6 +113,7 @@ class Decoder(nn.Module):
         z_stack = torch.stack([z] * S.shape[1], dim=1)
         x = torch.cat([S, z_stack], dim=2)
         y, h_c = self.lstm(x, (h, c))
+        y = self.dropout(y)
         params = self.y2params(y)
 
         # Separate into parameters for GMM and pen
