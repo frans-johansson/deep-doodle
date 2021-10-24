@@ -7,8 +7,9 @@ from torch.utils.data import DataLoader
 from model import device
 from model.basic import SketchRNN
 from model.loss import sketch_rnn_loss
-from utils.data import DataAugmentation, load_quickdraw_data
+from utils.data import DataAugmentation, load_quickdraw_data, to_stroke_3
 from utils.loops import train_loop, eval_loop
+from utils.canvas import CanvasGrid
 
 
 def handle_arguments():
@@ -44,11 +45,18 @@ def handle_arguments():
         default=0.0001,
     )
     argparser.add_argument(
+        "-Wkl",
+        help="Kullback-Leibler coefficient for loss",
+        dest="w_kl",
+        type=float,
+        default=1.0,
+    )
+    argparser.add_argument(
         "-dr",
         help="Dropout keep probability",
         dest="dropout",
         type=float,
-        default=0.9,
+        default=0.1,
     )
     argparser.add_argument(
         "-dd",
@@ -62,7 +70,7 @@ def handle_arguments():
         help="Output directory to place the model files when done with training",
         dest="output_dir",
         type=str,
-        default="data/models",
+        default="outputs",
     )
     argparser.add_argument(
         "-Eh",
@@ -91,6 +99,19 @@ def handle_arguments():
         type=int,
         default=10,
     )
+    argparser.add_argument(
+        "-de",
+        help="Shows the progress of the model by reconstructing a test sample",
+        dest="draw_every",
+        type=int,
+        default=0
+    )
+    argparser.add_argument(
+        "--finetune",
+        help="Whether or not to run in finetuning mode, must supply a model to finetune",
+        type=str,
+        default=None
+    )
 
     return argparser.parse_args()
 
@@ -109,11 +130,12 @@ if __name__ == "__main__":
     Nz = args.Nz
     dec_hidden = args.dec_hidden
     num_mixtures = args.num_mixtures
+    draw_every = args.draw_every
+    finetune = args.finetune
+    W_kl = args.w_kl
 
     # TODO: Consider moving to the argparser at some point
-    W_kl = 1.0
     clip_gradients = 1.0
-    loss_dir = "data/loss"
 
     # Set up datasets and loaders for training, testing and validating
     train_data, test_data, valid_data = load_quickdraw_data(classes, data_dir)
@@ -121,10 +143,10 @@ if __name__ == "__main__":
         train_data, batch_size=batch_size, shuffle=True, pin_memory=("cuda" in device)
     )
     test_loader = DataLoader(
-        test_data, batch_size=len(test_data), pin_memory=("cuda" in device)
+        test_data,  batch_size=batch_size, pin_memory=("cuda" in device)
     )
     valid_loader = DataLoader(
-        valid_data, batch_size=len(valid_data), pin_memory=("cuda" in device)
+        valid_data, batch_size=batch_size, pin_memory=("cuda" in device)
     )
 
     # Set up model and optimizers
@@ -140,8 +162,34 @@ if __name__ == "__main__":
     dec_optimizer = torch.optim.Adam(model.decoder.parameters(), lr=learning_rate)
     loss_fn = sketch_rnn_loss(W_kl)
 
+    # Handle finetuning if utilized
+    e = 0  # Number of epochs already trained before finetuning
+    if finetune:
+        finetune_dir = pathlib.Path(output_dir) / finetune
+        model = torch.load(finetune_dir / "sketchrnn.pth")
+        enc_optimizer = torch.optim.Adam(model.encoder.parameters(), lr=learning_rate)
+        dec_optimizer = torch.optim.Adam(model.decoder.parameters(), lr=learning_rate)
+        enc_optimizer.load_state_dict(torch.load(finetune_dir / "enc_opt.pth"))
+        dec_optimizer.load_state_dict(torch.load(finetune_dir / "dec_opt.pth"))
+
+        e = int(finetune.split('_')[0][:-3])
+
+    # Identifier directory for model
+    timestamp = dt.datetime.now().strftime("%d%m%y_%H%M")
+    identifier = f"{e+num_epochs}eps_{'_'.join(classes)}_{timestamp}"
+
+    # Set up directories
+    pathlib.Path(output_dir).mkdir(exist_ok=True)
+    output_dir = pathlib.Path(output_dir) / identifier
+    output_dir.mkdir(exist_ok=True)
+    loss_dir = pathlib.Path(output_dir) / "loss"
+    loss_dir.mkdir(exist_ok=True)
+    prog_dir = pathlib.Path(output_dir) / "prog"
+    prog_dir.mkdir(exist_ok=True)
+
     # Keep track of losses for visualization
     valid_losses = []
+    epoch_losses = []
     train_losses = []
 
     # Run the training and validation loops
@@ -164,8 +212,22 @@ if __name__ == "__main__":
         )
         
         print(f"Validation loss: {valid_loss:.3f}")
-        valid_losses += [valid_loss] * batch_size
-        train_losses += epoch_losses
+        valid_losses += [valid_loss]
+        epoch_losses += epoch_losses
+        train_losses += np.mean(epoch_losses)
+
+        # Draw a progress reconstruction
+        if draw_every != 0 and ((epoch+1) % draw_every) == 0:
+            test_example = next(iter(test_loader))[0]
+            filename = prog_dir / f"e{epoch+1}_{identifier}.svg"
+            canvas = CanvasGrid(filename, nrows=1, ncols=2)
+            canvas.draw_strokes(to_stroke_3(test_example), row=0, col=0)
+            rec = model.conditional_sample(test_example.unsqueeze(0).to(device))
+            try:
+                canvas.draw_strokes(to_stroke_3(rec.cpu()), row=0, col=1)
+            except:
+                pass
+            canvas.save()
     
     # Final test score
     test_loss = eval_loop(
@@ -176,11 +238,14 @@ if __name__ == "__main__":
     print(f"Test loss: {test_loss:.3f}")
 
     # Save the model, encoder and decoder separately
-    timestamp = dt.datetime.now().strftime("%d%m%y_%H%M")
-    torch.save(model, pathlib.Path(output_dir) / pathlib.Path(f"sketchrnn_{timestamp}.pth"))
-    torch.save(model.encoder.state_dict(), pathlib.Path(output_dir) / pathlib.Path(f"encoder_{timestamp}.pth"))
-    torch.save(model.decoder.state_dict(), pathlib.Path(output_dir) / pathlib.Path(f"decoder_{timestamp}.pth"))
+    torch.save(model, output_dir / "sketchrnn.pth")
+    torch.save(model.encoder.state_dict(), output_dir / "encoder.pth")
+    torch.save(model.decoder.state_dict(), output_dir / "decoder.pth")
+    torch.save(enc_optimizer.state_dict(), output_dir / "enc_opt.pth")
+    torch.save(dec_optimizer.state_dict(), output_dir / "dec_opt.pth")
 
     # Save the loss values for plotting
-    np.save(pathlib.Path(loss_dir) / pathlib.Path(f"train_{timestamp}.npy"), train_losses)
-    np.save(pathlib.Path(loss_dir) / pathlib.Path(f"valid_{timestamp}.npy"), valid_losses)
+    np.save(loss_dir / "train.npy", train_losses)
+    np.save(loss_dir / "epoch.npy", train_losses)
+    np.save(loss_dir / "valid.npy", valid_losses)
+    np.save(loss_dir / "test.npy", test_loss)
