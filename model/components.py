@@ -1,5 +1,6 @@
 """Model components for the Sketch-RNN VAE"""
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,7 +11,7 @@ from utils.sampling import sample_normal
 class Encoder(nn.Module):
     """Encodes an input set of strkoes to a latent representation h"""
 
-    def __init__(self, hidden_size, z_dims, num_layers, dropout):
+    def __init__(self, hidden_size, z_dims, dropout, num_layers=1):
         """
         Initialize the VAE encoder block. The input data is expected to have
         5 features (2 for the x, y offsets and 3 for the pen states).
@@ -21,8 +22,8 @@ class Encoder(nn.Module):
         Args:
             hidden_size: The number of dimensions for the latent space H
             z_dims: The number of dimensions for the vectors Z
-            num_layers: Numbers of stacked LSTMs
             dropout: The keep probability for random dropout regularization during training
+            num_layers: Numbers of stacked LSTMs, defaults to 1
         """
         super(Encoder, self).__init__()
 
@@ -50,16 +51,16 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
     """Decodes a given latent space seed z into a fixed-length sequence of mixture model parameters"""
 
-    def __init__(self, z_dims, hidden_size, num_layers, dropout, num_mixtures):
+    def __init__(self, z_dims, hidden_size, dropout, num_mixtures, num_layers=1):
         """
         Constructs the VAE decoder block
 
         Args:
             z_dims: The number of dimensions of the latent Z vector
             hidden_size: The size of the hidden vector of the decoder LSTM
-            num_layers: Numbers of stacked LSTMs
             dropout: The keep probability for random dropout regularization during training
             num_mixtures: The number of Gaussian mixtures to inlcude in the sampling scheme
+            num_layers: Numbers of stacked LSTMs, defaults to 1
         """
         super(Decoder, self).__init__()
         
@@ -70,7 +71,7 @@ class Decoder(nn.Module):
             in_features=z_dims,
             out_features=hidden_size
         )
-        self.lstm = nn.LSTM(
+        self.lstm =  nn.LSTM(
             input_size=5+z_dims,  # x = [S, z]
             hidden_size=hidden_size,
             num_layers=num_layers,
@@ -143,8 +144,8 @@ class Decoder(nn.Module):
         pi = F.softmax(params[..., 0] / self.t , dim=1).transpose(1, 2)
         mu_x = params[..., 1].transpose(1, 2)
         mu_y = params[..., 2].transpose(1, 2)
-        sigma_x = torch.exp(params[..., 3]).transpose(1, 2) / self.t
-        sigma_y = torch.exp(params[..., 4]).transpose(1, 2) / self.t
+        sigma_x = torch.exp(params[..., 3]).transpose(1, 2) * np.sqrt(self.t)
+        sigma_y = torch.exp(params[..., 4]).transpose(1, 2) * np.sqrt(self.t)
         rho_xy = torch.tanh(params[..., 5]).transpose(1, 2)
         return pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy
 

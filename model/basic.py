@@ -29,17 +29,18 @@ class SketchRNN(nn.Module):
             dropout: Dropout keep probability
         """
         super(SketchRNN, self).__init__()
+        self.dec_hidden = dec_hidden
 
         self.encoder = Encoder(
             hidden_size=enc_hidden,
             z_dims=z_dims,
-            num_layers=2,
+            # num_layers=2,
             dropout=dropout
         )
         self.decoder = Decoder(
             hidden_size=dec_hidden,
             z_dims=z_dims,
-            num_layers=2,
+            # num_layers=2,
             dropout=dropout,
             num_mixtures=num_mixtures,
         )
@@ -63,24 +64,26 @@ class SketchRNN(nn.Module):
 
         return params, mu, sigma_hat
 
-    def conditional_sample(self, input):
+    def conditional_sample(self, input, temperature=0.2):
         """
         Generates one conditional sample from the model given a single input sketch.
 
         Args:
             input: A single input sketch, must be of shape (1, seq_len, 5) i.e. with a batch size of 1.
+            temperature: A floating point value determining the temperature for sampling
 
         Returns:
             A tensor of shape (1, seq_len, 5) with the sampled results in stroke-5 format.
         """
         self.encoder.eval()
         self.decoder.eval()
+        self.decoder.t = temperature
         
         N = input.shape[1]  # Sequence length
         z, _, _ = self.encoder(input)  # Encode the input
         
-        stroke = torch.tensor([0, 0, 1, 0, 0])
-        h_c = (torch.zeros(2, 1, 512), torch.zeros(2, 1, 512))
+        stroke = torch.tensor([0, 0, 1, 0, 0], device=device)
+        h_c = (torch.zeros(1, 1, self.dec_hidden, device=device), torch.zeros(1, 1, self.dec_hidden, device=device))
         samples = [stroke]
 
         with torch.no_grad():
@@ -91,4 +94,5 @@ class SketchRNN(nn.Module):
                 stroke = sample_stroke(*params).to(torch.float32)
                 samples.append(stroke)
 
+        self.decoder.t = 1.0  # Restore temperature param
         return torch.stack(samples)
