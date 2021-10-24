@@ -3,4 +3,5 @@ __pycache__
 *env
 data
 img
+outputs
 *.ipynb
