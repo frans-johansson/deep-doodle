@@ -34,13 +34,11 @@ class SketchRNN(nn.Module):
         self.encoder = Encoder(
             hidden_size=enc_hidden,
             z_dims=z_dims,
-            # num_layers=2,
             dropout=dropout
         )
         self.decoder = Decoder(
             hidden_size=dec_hidden,
             z_dims=z_dims,
-            # num_layers=2,
             dropout=dropout,
             num_mixtures=num_mixtures,
         )
