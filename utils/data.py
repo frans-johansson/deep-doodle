@@ -172,22 +172,25 @@ def to_stroke_3(big_stroke):
     result[:, 2] = big_stroke[0:l, 3]
     return result
 
+
 def strokes_to_lines(strokes):
-  """Convert stroke-3 format to polyline format."""
-  # Code from https://github.com/magenta/magenta/blob/main/magenta/models/sketch_rnn/utils.py
-  x = 0
-  y = 0
-  lines = []
-  line = []
-  for i in range(len(strokes)):
-    if strokes[i, 2] == 1:
-      x += float(strokes[i, 0])
-      y += float(strokes[i, 1])
-      line.append([x, y])
-      lines.append(line)
-      line = []
-    else:
-      x += float(strokes[i, 0])
-      y += float(strokes[i, 1])
-      line.append([x, y])
-  return lines
+    """Convert stroke-3 format to polyline format."""
+    # Code from https://github.com/magenta/magenta/blob/main/magenta/models/sketch_rnn/utils.py
+    x = 0
+    y = 0
+    lines = []
+    line = []
+    for i in range(len(strokes)):
+        if strokes[i, 2] == 1:
+            x += float(strokes[i, 0])
+            y += float(strokes[i, 1])
+            line.append([x, y])
+            lines.append(line)
+            line = []
+        else:
+            x += float(strokes[i, 0])
+            y += float(strokes[i, 1])
+            line.append([x, y])
+    if len(line) != 0:
+        lines.append(line)
+    return lines
