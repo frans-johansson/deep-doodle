@@ -6,7 +6,7 @@ from utils.data import create_stroke_mask, separate_stroke_params
 from model import device
 
 
-def sketch_rnn_loss(W_kl, kl_min, eta_min, R):
+def sketch_rnn_loss(W_kl, kl_min, eta_min, R, start_epoch):
     """
     Generates and reterns the main loss function for training the SketchRNN VAE.
     This loss function computes three individual losses: Lp, Ls, and Lk representing the
@@ -19,8 +19,9 @@ def sketch_rnn_loss(W_kl, kl_min, eta_min, R):
         kl_min: Floor for the KL divergence loss term
         eta_min: Minimum value for eta in KL annealing
         R: Stepping parameter for KL annealing
+        start_epoch: Initial step to start at
     """
-    step = 0  # This will serve as a semi-global variable keeping track of training steps
+    step = start_epoch  # This will serve as a semi-global variable keeping track of training steps
 
     def _loss_fn(X, Y, training=True):
         loss_dict = {}

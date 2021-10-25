@@ -128,6 +128,13 @@ def handle_arguments():
         type=str,
         default=None
     )
+    argparser.add_argument(
+        "--continue",
+        help="Continue training a model from a given checkpoint. Requires identifier for model and epoch number",
+        nargs="+",
+        dest="cont",
+        default=None
+    )
 
     return argparser.parse_args()
 
@@ -150,6 +157,7 @@ if __name__ == "__main__":
     draw_every = args.draw_every
     save_every = args.save_every
     finetune = args.finetune
+    cont = args.cont
     W_kl = args.w_kl
 
     # TODO: Consider moving to the argparser at some point
@@ -180,24 +188,34 @@ if __name__ == "__main__":
     )
     model = model.to(device)
     enc_optimizer = torch.optim.Adam(model.encoder.parameters(), lr=learning_rate)
+    enc_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(enc_optimizer, patience=10, verbose=True)
     dec_optimizer = torch.optim.Adam(model.decoder.parameters(), lr=learning_rate)
-    loss_fn = sketch_rnn_loss(W_kl, kl_min, eta_min, R)
+    dec_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(dec_optimizer, patience=10, verbose=True)
 
-    # Handle finetuning if utilized
-    e = 0  # Number of epochs already trained before finetuning
+    # Identifier directory for model
+    timestamp = dt.datetime.now().strftime("%d%m%y_%H%M")
+    identifier = f"{'_'.join(classes)}_{timestamp}"
+
+    # Handle finetuning or continuing if utilized
+    start_epoch = 0  # Initial epoch, may be offset if continuing
     if finetune:
         finetune_dir = pathlib.Path(output_dir) / finetune
+        identifier += f"_f_{finetune}"
         model = torch.load(finetune_dir / "sketchrnn.pth")
         enc_optimizer = torch.optim.Adam(model.encoder.parameters(), lr=learning_rate)
         dec_optimizer = torch.optim.Adam(model.decoder.parameters(), lr=learning_rate)
         enc_optimizer.load_state_dict(torch.load(finetune_dir / "enc_opt.pth"))
         dec_optimizer.load_state_dict(torch.load(finetune_dir / "dec_opt.pth"))
-
-        e = int(finetune.split('_')[0][:-3])
-
-    # Identifier directory for model
-    timestamp = dt.datetime.now().strftime("%d%m%y_%H%M")
-    identifier = f"{e+num_epochs}eps_{'_'.join(classes)}_{timestamp}"
+    elif cont:
+        model_id, start_epoch = cont
+        start_epoch = int(start_epoch)
+        identifier = model_id  # Continue training with the same identifier
+        continue_dir = pathlib.Path(output_dir) / model_id / "checkpoints"
+        model = torch.load(continue_dir / f"{start_epoch}_sketchrnn.pth")
+        enc_optimizer = torch.optim.Adam(model.encoder.parameters(), lr=learning_rate)
+        dec_optimizer = torch.optim.Adam(model.decoder.parameters(), lr=learning_rate)
+        enc_optimizer.load_state_dict(torch.load(continue_dir / f"{start_epoch}_enc_opt.pth"))
+        dec_optimizer.load_state_dict(torch.load(continue_dir / f"{start_epoch}_dec_opt.pth"))
 
     # Set up directories
     pathlib.Path(output_dir).mkdir(exist_ok=True)
@@ -210,10 +228,12 @@ if __name__ == "__main__":
 
     # TensorBoard setup
     writer = SummaryWriter(log_dir / identifier)
-    writer.add_graph(model, next(iter(test_loader)).to(device))
+    
+    # Define the loss function
+    loss_fn = sketch_rnn_loss(W_kl, kl_min, eta_min, R, start_epoch*len(train_loader))
 
     # Run the training and validation loops
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, start_epoch + num_epochs):
         print()
 
         epoch_losses = train_loop(
@@ -249,17 +269,16 @@ if __name__ == "__main__":
                 rec_img = strokes_to_rgb(to_stroke_3(rec.cpu()))
             except:
                 pass  # Sometimes the sampling fails early on
-            
-            writer.add_image("conditional sampling/original", org_img, global_step=epoch+1, dataformats='HWC')
+            writer.add_image("conditional sampling/original", org_img, global_step=0, dataformats='HWC')
             writer.add_image("conditional sampling/reconstruction", rec_img, global_step=epoch+1, dataformats='HWC')
         
         # Save a model checkpoint
         if save_every != 0 and ((epoch+1) % save_every) == 0:
-            torch.save(model, checkpoint_dir / f"e{epoch+1}_sketchrnn.pth")
-            torch.save(model.encoder.state_dict(), checkpoint_dir / f"e{epoch+1}_encoder.pth")
-            torch.save(model.decoder.state_dict(), checkpoint_dir / f"e{epoch+1}_decoder.pth")
-            torch.save(enc_optimizer.state_dict(), checkpoint_dir / f"e{epoch+1}_enc_opt.pth")
-            torch.save(dec_optimizer.state_dict(), checkpoint_dir / f"e{epoch+1}_dec_opt.pth")
+            torch.save(model, checkpoint_dir / f"{epoch+1}_sketchrnn.pth")
+            torch.save(model.encoder.state_dict(), checkpoint_dir / f"{epoch+1}_encoder.pth")
+            torch.save(model.decoder.state_dict(), checkpoint_dir / f"{epoch+1}_decoder.pth")
+            torch.save(enc_optimizer.state_dict(), checkpoint_dir / f"{epoch+1}_enc_opt.pth")
+            torch.save(dec_optimizer.state_dict(), checkpoint_dir / f"{epoch+1}_dec_opt.pth")
     
     # Final test score
     test_losses = eval_loop(
