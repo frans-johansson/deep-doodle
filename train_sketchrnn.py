@@ -245,6 +245,13 @@ if __name__ == "__main__":
             clip_gradients,
             DataAugmentation()
         )
+
+        # Log the gradient information from the last batch in the epoch
+        enc_grads = [param.grad.flatten().cpu().detach().numpy() for param in model.encoder.parameters()]
+        dec_grads = [param.grad.flatten().cpu().detach().numpy() for param in model.decoder.parameters()]
+        writer.add_histogram("gradients/encoder", np.concatenate(enc_grads), global_step=epoch+1)
+        writer.add_histogram("gradients/decoder", np.concatenate(dec_grads), global_step=epoch+1)
+
         valid_losses = eval_loop(
             valid_loader,
             model,
@@ -258,6 +265,9 @@ if __name__ == "__main__":
         valid_df = pd.DataFrame.from_records(valid_losses)
         for key, value in valid_df.mean().iteritems():
             writer.add_scalar(f"valid/{key}", value, global_step=epoch+1)
+
+        enc_scheduler.step(valid_df["loss"].mean())
+        dec_scheduler.step(valid_df["loss"].mean())
 
         # Draw a progress reconstruction
         if draw_every != 0 and ((epoch+1) % draw_every) == 0:
