@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from model import device
-from model.basic import SketchRNN
+from model.sketchrnn import SketchRNN
 from model.loss import sketch_rnn_loss
 from utils.data import DataAugmentation, load_quickdraw_data, to_stroke_3
 from utils.loops import train_loop, eval_loop
