@@ -2,14 +2,16 @@ import datetime as dt
 import argparse
 import pathlib
 import numpy as np
+import pandas as pd
 import torch
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from model import device
 from model.sketchrnn import SketchRNN
 from model.loss import sketch_rnn_loss
 from utils.data import DataAugmentation, load_quickdraw_data, to_stroke_3
 from utils.loops import train_loop, eval_loop
-from utils.canvas import CanvasGrid
+from utils.canvas import strokes_to_rgb
 
 
 def handle_arguments():
@@ -64,7 +66,14 @@ def handle_arguments():
         dest="data_dir",
         type=str,
         default="data/quickdraw",
-    )
+    ),
+    argparser.add_argument(
+        "-ld",
+        help="Log directory for TensorBoard",
+        dest="log_dir",
+        type=str,
+        default="logs",
+    ),
     argparser.add_argument(
         "-o",
         help="Output directory to place the model files when done with training",
@@ -125,6 +134,7 @@ if __name__ == "__main__":
     learning_rate = args.learning_rate
     dropout = args.dropout
     data_dir = args.data_dir
+    log_dir = args.log_dir
     output_dir = args.output_dir
     enc_hidden = args.enc_hidden
     Nz = args.Nz
@@ -143,7 +153,7 @@ if __name__ == "__main__":
     # Set up datasets and loaders for training, testing and validating
     train_data, test_data, valid_data = load_quickdraw_data(classes, data_dir)
     train_loader = DataLoader(
-        train_data, batch_size=batch_size, shuffle=True, pin_memory=("cuda" in device)
+        train_data, batch_size=batch_size, shuffle=False, pin_memory=("cuda" in device)
     )
     test_loader = DataLoader(
         test_data,  batch_size=batch_size, pin_memory=("cuda" in device)
@@ -185,15 +195,14 @@ if __name__ == "__main__":
     pathlib.Path(output_dir).mkdir(exist_ok=True)
     output_dir = pathlib.Path(output_dir) / identifier
     output_dir.mkdir(exist_ok=True)
-    loss_dir = pathlib.Path(output_dir) / "loss"
-    loss_dir.mkdir(exist_ok=True)
-    prog_dir = pathlib.Path(output_dir) / "prog"
-    prog_dir.mkdir(exist_ok=True)
+    checkpoint_dir = output_dir / "checkpoints"
+    checkpoint_dir.mkdir(exist_ok=True)
+    log_dir = pathlib.Path(log_dir)
+    log_dir.mkdir(exist_ok=True)
 
-    # Keep track of losses for visualization
-    valid_losses = []
-    epoch_losses = []
-    train_losses = []
+    # TensorBoard setup
+    writer = SummaryWriter(log_dir / identifier)
+    writer.add_graph(model, next(iter(test_loader)).to(device))
 
     # Run the training and validation loops
     for epoch in range(num_epochs):
@@ -208,37 +217,56 @@ if __name__ == "__main__":
             clip_gradients,
             DataAugmentation()
         )
-        valid_loss = eval_loop(
+        valid_losses = eval_loop(
             valid_loader,
             model,
             loss_fn
         )
         
-        print(f"Validation loss: {valid_loss:.3f}")
-        valid_losses += [valid_loss]
-        epoch_losses += epoch_losses
-        train_losses += np.mean(epoch_losses)
+        epoch_df = pd.DataFrame.from_records(epoch_losses)
+        for key, value in epoch_df.mean().iteritems():
+            writer.add_scalar(f"train/{key}", value, global_step=epoch+1)
+
+        valid_df = pd.DataFrame.from_records(valid_losses)
+        for key, value in valid_df.mean().iteritems():
+            writer.add_scalar(f"valid/{key}", value, global_step=epoch+1)
 
         # Draw a progress reconstruction
         if draw_every != 0 and ((epoch+1) % draw_every) == 0:
             test_example = next(iter(test_loader))[0]
-            filename = prog_dir / f"e{epoch+1}_{identifier}.svg"
-            canvas = CanvasGrid(filename, nrows=1, ncols=2)
-            canvas.draw_strokes(to_stroke_3(test_example), row=0, col=0)
-            rec = model.conditional_sample(test_example.unsqueeze(0).to(device))
+            org_img = strokes_to_rgb(to_stroke_3(test_example.cpu()))
+            rec_img = np.zeros_like(org_img)
             try:
-                canvas.draw_strokes(to_stroke_3(rec.cpu()), row=0, col=1)
+                rec = model.conditional_sample(test_example.unsqueeze(0).to(device))
+                rec_img = strokes_to_rgb(to_stroke_3(rec.cpu()))
             except:
-                pass
-            canvas.save()
+                pass  # Sometimes the sampling fails early on
+            
+            writer.add_image("conditional sampling/original", org_img, global_step=epoch+1, dataformats='HWC')
+            writer.add_image("conditional sampling/reconstruction", rec_img, global_step=epoch+1, dataformats='HWC')
+        
+        # Save a model checkpoint
+        if save_every != 0 and ((epoch+1) % save_every) == 0:
+            torch.save(model, checkpoint_dir / f"e{epoch+1}_sketchrnn.pth")
+            torch.save(model.encoder.state_dict(), checkpoint_dir / f"e{epoch+1}_encoder.pth")
+            torch.save(model.decoder.state_dict(), checkpoint_dir / f"e{epoch+1}_decoder.pth")
+            torch.save(enc_optimizer.state_dict(), checkpoint_dir / f"e{epoch+1}_enc_opt.pth")
+            torch.save(dec_optimizer.state_dict(), checkpoint_dir / f"e{epoch+1}_dec_opt.pth")
     
     # Final test score
-    test_loss = eval_loop(
+    test_losses = eval_loop(
         test_loader,
         model,
         loss_fn
     )
-    print(f"Test loss: {test_loss:.3f}")
+    test_df = pd.DataFrame.from_records(test_losses)
+    writer.add_hparams({
+        "Eh": enc_hidden,
+        "Nz": Nz,
+        "Dh": dec_hidden,
+        "lr": learning_rate,
+        "M": num_mixtures
+    }, {f"hparams/{k}": v for k, v in test_df.mean().iteritems()})
 
     # Save the model, encoder and decoder separately
     torch.save(model, output_dir / "sketchrnn.pth")
@@ -247,8 +275,5 @@ if __name__ == "__main__":
     torch.save(enc_optimizer.state_dict(), output_dir / "enc_opt.pth")
     torch.save(dec_optimizer.state_dict(), output_dir / "dec_opt.pth")
 
-    # Save the loss values for plotting
-    np.save(loss_dir / "train.npy", train_losses)
-    np.save(loss_dir / "epoch.npy", train_losses)
-    np.save(loss_dir / "valid.npy", valid_losses)
-    np.save(loss_dir / "test.npy", test_loss)
+    writer.flush()
+    writer.close()

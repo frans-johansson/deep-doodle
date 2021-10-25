@@ -23,6 +23,8 @@ def sketch_rnn_loss(W_kl, kl_min, eta_min, R):
     step = 0  # This will serve as a semi-global variable keeping track of training steps
 
     def _loss_fn(X, Y, training=True):
+        loss_dict = {}
+
         # Break out the learned probabilities and parameters for the latent space Z
         (pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy, q), mu, sigma_hat = Y
         gmm_params = (pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy)
@@ -36,14 +38,21 @@ def sketch_rnn_loss(W_kl, kl_min, eta_min, R):
         Ls = stroke_loss(S, mask, gmm_params)
         Lk = kullback_leibler_loss(mu, sigma_hat, kl_min)
 
+        loss_dict.setdefault("Lp", float(Lp.item()))
+        loss_dict.setdefault("Ls", float(Ls.item()))
+        loss_dict.setdefault("Lk", float(Lk.item()))
+
         if training:
             # KL annealing computation
             nonlocal step
             step += 1
             eta = 1.0 - (1.0 - eta_min) * R**step
             Lk *= eta
+            loss_dict.setdefault("Lk*eta", float(Lk.item()))
 
-        return Lp + Ls + W_kl * Lk, {"Lp": Lp, "Ls": Ls, "Lk": Lk, "Lr": Lp + Ls}
+        loss = Lp + Ls + W_kl * Lk
+        loss_dict.setdefault("loss", float(loss.item()))
+        return loss, loss_dict
 
     return _loss_fn
 

@@ -2,10 +2,13 @@
 Utilities relating to rendering SVG images from offset data
 """
 
+import torch
 import numpy as np
 import svgwrite as svg
+import matplotlib.pyplot as plt
+import PIL
 
-from utils.data import strokes_to_lines
+from utils.data import strokes_to_lines, to_stroke_3
 
 
 class CanvasGrid:
@@ -68,3 +71,23 @@ class CanvasGrid:
 
     def save(self):
         self.drw.save()
+
+
+def strokes_to_rgb(S):
+    # Code adapted from https://github.com/OhataKenji/SketchRNN-Pytorch/tree/7b7dd319df0ae0a521e4eb2a9c1733b3d0a535d1
+    plt.axis('equal')
+    lines = strokes_to_lines(S)
+
+    for line in lines:
+        for i in range(1, len(line)):
+            x0, y0 = line[i-1]
+            x1, y1 = line[i]
+            plt.plot([x0, x1], [-y0, -y1])
+
+    canvas = plt.get_current_fig_manager().canvas
+    canvas.draw()
+    pil_image = PIL.Image.frombytes('RGB', canvas.get_width_height(),
+                                    canvas.tostring_rgb())
+    plt.close("all")
+
+    return np.asarray(pil_image)

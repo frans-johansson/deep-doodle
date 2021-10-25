@@ -3,7 +3,7 @@
 import torch
 import torch.nn as nn
 from tqdm import tqdm
-from model import device
+from model import device, loss
 
 
 def train_loop(train_loader, model, loss_fn, optimizers, epoch, clip_gradients, augment):
@@ -21,7 +21,7 @@ def train_loop(train_loader, model, loss_fn, optimizers, epoch, clip_gradients, 
         augment: A `nn.Module` for data augmentation 
 
     Returns:
-        A list of losses for each batch in this epoch
+        A list of dictionaries of losses for each batch in this epoch
     """
     model.train()
     losses = []  # Keep track of the losses during each epoch
@@ -53,8 +53,7 @@ def train_loop(train_loader, model, loss_fn, optimizers, epoch, clip_gradients, 
             for optimizer in optimizers:
                 optimizer.step()
 
-            losses.append(float(loss.item()))
-            train_epoch.set_postfix(loss=loss.item())
+            losses.append(loss_dict)
 
     return losses
 
@@ -69,15 +68,15 @@ def eval_loop(dataloader, model, loss_fn):
         loss_fn: The loss function used for evaluation
 
     Returns:
-        The average loss over all data in the given dataloader
+        A list of loss dictionaries for each batch in the dataloader
     """
     model.eval()
-    loss = 0
+    losses = []
     for X in dataloader:
         with torch.no_grad():
             X = X.to(device)
             Y = model(X)
-            step_loss, _ = loss_fn(X, Y, training=False)
-            loss += step_loss
+            _, loss_dict = loss_fn(X, Y, training=False)
+            losses.append(loss_dict)
     model.train()
-    return loss.item()/len(dataloader)
+    return losses
