@@ -40,12 +40,13 @@ class Encoder(nn.Module):
         self.h2sigma = nn.Linear(in_features=hidden_size*2, out_features=z_dims)
 
     def forward(self, x):
-        y, _ = self.lstm(x)
-        y = y[:, -1, :]  # Only care about the last output
+        _, (h, _) = self.lstm(x)
+        h_forward, h_backward = torch.split(h, 1)
+        y = torch.cat([h_forward.squeeze(0), h_backward.squeeze(0)], 1)
         y = self.dropout(y)
         mu = self.h2mu(y)
         sigma_hat = self.h2sigma(y)
-        sigma = torch.exp(sigma_hat)
+        sigma = torch.exp(sigma_hat / 2.0)
         z = sample_normal(mu, sigma)
         return z, mu, sigma_hat
 
