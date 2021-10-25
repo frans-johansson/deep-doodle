@@ -11,7 +11,8 @@ def sample_normal(mu, sigma):
     assert (
         mu.shape == sigma.shape
     ), "Mean and standard deviation must have the same length"
-    N = torch.from_numpy(rng.normal(0, 1, size=(mu.shape))).to(torch.float32).to(device)
+    # N = torch.from_numpy(rng.normal(0, 1, size=(mu.shape))).to(torch.float32).to(device)
+    N = torch.normal(torch.zeros_like(mu), torch.ones_like(mu)).to(device)
     return mu + sigma * N
 
 
