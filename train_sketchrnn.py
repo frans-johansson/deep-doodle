@@ -114,7 +114,14 @@ def handle_arguments():
         dest="draw_every",
         type=int,
         default=0
-    )
+    ),
+    argparser.add_argument(
+        "-se",
+        help="Regularly save a checkpoint of the model after a certain number of epochs",
+        dest="save_every",
+        type=int,
+        default=0
+    ),
     argparser.add_argument(
         "--finetune",
         help="Whether or not to run in finetuning mode, must supply a model to finetune",
@@ -141,6 +148,7 @@ if __name__ == "__main__":
     dec_hidden = args.dec_hidden
     num_mixtures = args.num_mixtures
     draw_every = args.draw_every
+    save_every = args.save_every
     finetune = args.finetune
     W_kl = args.w_kl
 
