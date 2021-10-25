@@ -42,7 +42,7 @@ def train_loop(train_loader, model, loss_fn, optimizers, epoch, clip_gradients, 
             Y = model(X)
 
             # Compute loss and run the backwards step
-            loss = loss_fn(X, Y)
+            loss, loss_dict = loss_fn(X, Y)
             loss.backward()
 
             # Gradient clipping
@@ -77,6 +77,7 @@ def eval_loop(dataloader, model, loss_fn):
         with torch.no_grad():
             X = X.to(device)
             Y = model(X)
-            loss += loss_fn(X, Y)
+            step_loss, _ = loss_fn(X, Y, training=False)
+            loss += step_loss
     model.train()
     return loss.item()/len(dataloader)

@@ -6,18 +6,23 @@ from utils.data import create_stroke_mask, separate_stroke_params
 from model import device
 
 
-def sketch_rnn_loss(W_kl):
+def sketch_rnn_loss(W_kl, kl_min, eta_min, R):
     """
     Generates and reterns the main loss function for training the SketchRNN VAE.
     This loss function computes three individual losses: Lp, Ls, and Lk representing the
     pen state, stroke likelihood from the learned GMM as well as the Kullback-Leibler Divergence loss
-    and returns a weighted sum as the final loss as follows Lp + Ls + W_kl * Lk.
+    and returns a weighted sum as the final loss as follows Lp + Ls + W_kl * Lk, as well as
+    a dictionary of individual losses for logging.
 
     Args:
         W_kl: The weight to be given to the Lk term of the computed loss
+        kl_min: Floor for the KL divergence loss term
+        eta_min: Minimum value for eta in KL annealing
+        R: Stepping parameter for KL annealing
     """
+    step = 0  # This will serve as a semi-global variable keeping track of training steps
 
-    def _loss_fn(X, Y):
+    def _loss_fn(X, Y, training=True):
         # Break out the learned probabilities and parameters for the latent space Z
         (pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy, q), mu, sigma_hat = Y
         gmm_params = (pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy)
@@ -29,8 +34,16 @@ def sketch_rnn_loss(W_kl):
         # Compute and return the loss
         Lp = pen_loss(p, q)
         Ls = stroke_loss(S, mask, gmm_params)
-        Lk = kullback_leibler_loss(mu, sigma_hat)
-        return Lp + Ls + W_kl * Lk
+        Lk = kullback_leibler_loss(mu, sigma_hat, kl_min)
+
+        if training:
+            # KL annealing computation
+            nonlocal step
+            step += 1
+            eta = 1.0 - (1.0 - eta_min) * R**step
+            Lk *= eta
+
+        return Lp + Ls + W_kl * Lk, {"Lp": Lp, "Ls": Ls, "Lk": Lk, "Lr": Lp + Ls}
 
     return _loss_fn
 
@@ -44,7 +57,7 @@ def pen_loss(p, q):
         q: Predicted categorical probabilities, expected to be (batch, seq_len, 3)
     """
     N_max = p.shape[1]
-    loss = p * torch.log(q)
+    loss = p * torch.log(q + 1e-5)
     loss = -1 * torch.sum(loss, dim=(1, 2)) / N_max
     return torch.mean(loss)
 
@@ -68,7 +81,7 @@ def bivariate_normal_pdf(mu_x, mu_y, sigma_x, sigma_y, rho_xy):
         z = xx + yy -2*rho_xy*xy
 
         z_exp = torch.exp(-z/(2*(1-rho_xy**2)))
-        z_norm = 2 * np.pi * sigma_x * sigma_y * torch.sqrt(1 - rho_xy**2)
+        z_norm = 2 * np.pi * sigma_x * sigma_y * torch.sqrt(1 - rho_xy**2 + 1e-5)
 
         return z_exp / z_norm
     
@@ -100,9 +113,16 @@ def stroke_loss(S, mask, params):
     return torch.mean(loss)
 
 
-def kullback_leibler_loss(mu, sigma_hat):
+def kullback_leibler_loss(mu, sigma_hat, kl_min):
     """Computes and returns the Kullback-Leibler loss against a standard normal distribution"""
-    Nz = mu.shape[1]
-    loss = 1 + sigma_hat - torch.pow(mu, 2) - torch.exp(sigma_hat)
-    loss /= -1 * Nz
-    return torch.sum(loss)
+    loss = -torch.sum(1 + sigma_hat - mu**2 - torch.exp(sigma_hat)) \
+        / (2. * mu.shape[0] * mu.shape[1])
+
+    # Old implementation
+    # Nz = mu.shape[1]
+    # loss = 1 + sigma_hat - torch.pow(mu, 2) - torch.exp(sigma_hat)
+    # loss /= -2 * Nz
+    # loss = torch.mean(loss) 
+
+    loss_min = torch.tensor(kl_min, device=device)
+    return torch.max(loss, loss_min)

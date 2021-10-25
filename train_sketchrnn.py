@@ -136,6 +136,9 @@ if __name__ == "__main__":
 
     # TODO: Consider moving to the argparser at some point
     clip_gradients = 1.0
+    kl_min = 0.2
+    eta_min = 0.01
+    R = 0.9999
 
     # Set up datasets and loaders for training, testing and validating
     train_data, test_data, valid_data = load_quickdraw_data(classes, data_dir)
@@ -160,7 +163,7 @@ if __name__ == "__main__":
     model = model.to(device)
     enc_optimizer = torch.optim.Adam(model.encoder.parameters(), lr=learning_rate)
     dec_optimizer = torch.optim.Adam(model.decoder.parameters(), lr=learning_rate)
-    loss_fn = sketch_rnn_loss(W_kl)
+    loss_fn = sketch_rnn_loss(W_kl, kl_min, eta_min, R)
 
     # Handle finetuning if utilized
     e = 0  # Number of epochs already trained before finetuning
