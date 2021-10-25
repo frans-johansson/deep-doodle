@@ -2,13 +2,12 @@
 Utilities relating to rendering SVG images from offset data
 """
 
-import torch
 import numpy as np
 import svgwrite as svg
 import matplotlib.pyplot as plt
 import PIL
 
-from utils.data import strokes_to_lines, to_stroke_3
+from utils.data import strokes_to_lines
 
 
 class CanvasGrid:

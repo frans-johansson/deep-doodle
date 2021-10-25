@@ -1,5 +1,4 @@
 import torch
-import torch.nn.functional as F
 from numpy.random import default_rng
 from model import device
 

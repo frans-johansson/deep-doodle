@@ -3,7 +3,7 @@
 import torch
 import torch.nn as nn
 from tqdm import tqdm
-from model import device, loss
+from model import device
 
 
 def train_loop(train_loader, model, loss_fn, optimizers, epoch, clip_gradients, augment):
