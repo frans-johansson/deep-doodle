@@ -69,6 +69,7 @@ class Decoder(nn.Module):
         
         self.num_layers = num_layers
         self.hidden_size = hidden_size
+        self.num_mixtures = num_mixtures
         self.t = 1.0  # Temperature parameter should be 1.0 by default
 
         self.dropout = nn.Dropout(dropout)
@@ -118,39 +119,14 @@ class Decoder(nn.Module):
         params = self.y2params(y)
 
         # Separate into parameters for GMM and pen
-        split_params = torch.split(params, 6, dim=2)
-        gmm_params = torch.stack(split_params[:-1], dim=1)  # (batch, mixture, stroke, 6)
-        pen_params = split_params[-1]  # (batch, stroke, 3)
+        pi_hat, mu_x, mu_y, sigma_x_hat, sigma_y_hat, rho_xy, q_hat = torch.split(params, self.num_mixtures, dim=2)
         
-        # Grab separate normalized GMM parameters
-        pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy = self._normalized_gmm_params(gmm_params)
-
-        # Normalize the pen parameters
-        q = self._normalized_pen_params(pen_params)
+        # Normalized GMM and pen parameters
+        pi = F.softmax(pi_hat / self.t, dim=2)
+        sigma_x = torch.exp(sigma_x_hat) * np.sqrt(self.t)
+        sigma_y = torch.exp(sigma_y_hat) * np.sqrt(self.t)
+        rho_xy = torch.tanh(rho_xy)
+        q = F.softmax(q_hat / self.t, dim=2)
 
         return (pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy, q), h_c
-    
-    def _normalized_pen_params(self, params):
-        """Returns a tensor of normalized pen state probabilities scaled by some temperature value"""
-        return F.softmax(params / self.t, dim=2)
-
-    def _normalized_gmm_params(self, params):
-        """
-        Returns a tuple of normalized GMM parameters given the unnormalized output of the SketchRNN model.
-
-        Args:
-            params: The unnormalized GMM parameters output by e.g. the SketchRNN model. Should have shape
-                (batch, num_mixtures, seq_len, 6)
-
-        Returns:
-            pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy
-        """
-        pi = F.softmax(params[..., 0] / self.t , dim=1).transpose(1, 2)
-        mu_x = params[..., 1].transpose(1, 2)
-        mu_y = params[..., 2].transpose(1, 2)
-        sigma_x = torch.exp(params[..., 3]).transpose(1, 2) * np.sqrt(self.t)
-        sigma_y = torch.exp(params[..., 4]).transpose(1, 2) * np.sqrt(self.t)
-        rho_xy = torch.tanh(params[..., 5]).transpose(1, 2)
-        return pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy
-
     
