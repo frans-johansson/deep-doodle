@@ -163,13 +163,13 @@ if __name__ == "__main__":
     # TODO: Consider moving to the argparser at some point
     clip_gradients = 1.0
     kl_min = 0.2
-    eta_min = 0.01
-    R = 0.9999
+    eta_min = 0.0
+    R = 0.99999
 
     # Set up datasets and loaders for training, testing and validating
     train_data, test_data, valid_data = load_quickdraw_data(classes, data_dir)
     train_loader = DataLoader(
-        train_data, batch_size=batch_size, shuffle=False, pin_memory=("cuda" in device)
+        train_data, batch_size=batch_size, shuffle=True, pin_memory=("cuda" in device)
     )
     test_loader = DataLoader(
         test_data,  batch_size=batch_size, pin_memory=("cuda" in device)
