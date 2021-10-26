@@ -24,30 +24,33 @@ class SketchDataset(Dataset):
             data: A NumPy array of data samples in stroke-3 format.
             max_len: Only utilize samples shorter than this length and pad all samples to this length.
         """
-        self.original_data = np.copy(data)
-        self.model_data = [
-            to_stroke_5(data, seq_len)
-            for data in self.original_data
-            if len(data) <= seq_len
+        self.data = np.copy(data)
+        self.scale = self._normalizing_scale()
+        scaled_data = map(self._apply_scale, self.data)
+        self.data = [
+            to_stroke_5(stroke_3, seq_len)
+            for stroke_3 in scaled_data
+            if len(stroke_3) <= seq_len
         ]
-        self._normalize(self.model_data)
 
-    def _normalize(self, data):
-        xy = np.concatenate([line[..., :2] for line in data])
+    def _normalizing_scale(self):
+        xy = np.concatenate([line[..., :2] for line in self.data])
         offsets = xy.reshape((-1))
-        std = np.std(offsets)
-        
-        for drawing in data:
-            drawing[..., :2] /= std
+        return np.std(offsets)
+
+    def _apply_scale(self, seq):
+        seq = np.float32(seq)
+        seq[:, 0:2] /= self.scale
+        return seq
     
 
     def __len__(self):
         """Returns the length, number of samples, of the loaded data"""
-        return len(self.model_data)
+        return len(self.data)
 
     def __getitem__(self, index):
         """Returns the sample at the given index"""
-        return self.model_data[index].astype("float32")
+        return self.data[index].astype("float32")
 
 
 class DataAugmentation(nn.Module):
