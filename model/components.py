@@ -68,12 +68,13 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         
         self.num_layers = num_layers
+        self.hidden_size = hidden_size
         self.t = 1.0  # Temperature parameter should be 1.0 by default
 
         self.dropout = nn.Dropout(dropout)
-        self.z2h = nn.Linear(
+        self.z2hc = nn.Linear(
             in_features=z_dims,
-            out_features=hidden_size
+            out_features=2*hidden_size
         )
         self.lstm = nn.LSTM(
             input_size=5+z_dims,  # x = [S, z]
@@ -103,17 +104,16 @@ class Decoder(nn.Module):
                 These can be used for sampling from a trained model
         """
         if h_c is None:  # Initialize from z
-            h = self.z2h(z)
-            h = self.dropout(h)
-            h = torch.tanh(h)
-            h = torch.stack([h]*self.num_layers, dim=0)  # Needs to be (num_layers, batch_size, hidden_size)
-            c = torch.zeros_like(h)
-        else:
-            h, c = h_c
+            hc = self.z2hc(z)
+            hc = self.dropout(hc)
+            hc = torch.tanh(hc)
+            hc = torch.stack([hc]*self.num_layers, dim=0)  # Needs to be (num_layers, batch_size, hidden_size)
+            h, c = torch.split(hc, self.hidden_size, dim=2)
+            h_c = (h.contiguous(), c.contiguous())
 
         z_stack = torch.stack([z] * S.shape[1], dim=1)
         x = torch.cat([S, z_stack], dim=2)
-        y, h_c = self.lstm(x, (h, c))
+        y, h_c = self.lstm(x, h_c)
         y = self.dropout(y)
         params = self.y2params(y)
 
@@ -123,11 +123,9 @@ class Decoder(nn.Module):
         pen_params = split_params[-1]  # (batch, stroke, 3)
         
         # Grab separate normalized GMM parameters
-        # pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy = normalized_gmm_params(gmm_params[:, :, :-1, :])
         pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy = self._normalized_gmm_params(gmm_params)
 
         # Normalize the pen parameters
-        # q = F.softmax(pen_params[:, :-1, :], dim=2)
         q = self._normalized_pen_params(pen_params)
 
         return (pi, mu_x, mu_y, sigma_x, sigma_y, rho_xy, q), h_c
