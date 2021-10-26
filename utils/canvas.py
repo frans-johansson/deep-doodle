@@ -78,10 +78,9 @@ def strokes_to_rgb(S):
     lines = strokes_to_lines(S)
 
     for line in lines:
-        for i in range(1, len(line)):
-            x0, y0 = line[i-1]
-            x1, y1 = line[i]
-            plt.plot([x0, x1], [-y0, -y1])
+        xs = [x for x, _ in line]
+        ys = [-y for _, y in line]
+        plt.plot(xs, ys)
 
     canvas = plt.get_current_fig_manager().canvas
     canvas.draw()

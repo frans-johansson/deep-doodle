@@ -81,7 +81,8 @@ class SketchRNN(nn.Module):
         z, _, _ = self.encoder(input)  # Encode the input
         
         stroke = torch.tensor([0, 0, 1, 0, 0], device=device)
-        h_c = (torch.zeros(1, 1, self.dec_hidden, device=device), torch.zeros(1, 1, self.dec_hidden, device=device))
+        # h_c = (torch.zeros(1, 1, self.dec_hidden, device=device), torch.zeros(1, 1, self.dec_hidden, device=device))
+        h_c = None
         samples = [stroke]
 
         with torch.no_grad():
