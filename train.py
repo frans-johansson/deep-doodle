@@ -188,9 +188,7 @@ if __name__ == "__main__":
     )
     model = model.to(device)
     enc_optimizer = torch.optim.Adam(model.encoder.parameters(), lr=learning_rate)
-    enc_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(enc_optimizer, patience=10, verbose=True)
     dec_optimizer = torch.optim.Adam(model.decoder.parameters(), lr=learning_rate)
-    dec_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(dec_optimizer, patience=10, verbose=True)
 
     # Identifier directory for model
     timestamp = dt.datetime.now().strftime("%d%m%y_%H%M")
@@ -229,8 +227,10 @@ if __name__ == "__main__":
     # TensorBoard setup
     writer = SummaryWriter(log_dir / identifier)
     
-    # Define the loss function
+    # Define the loss function and learning rate schedulers
     loss_fn = sketch_rnn_loss(W_kl, kl_min, eta_min, R, start_epoch*len(train_loader))
+    enc_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(enc_optimizer, patience=10, verbose=True)
+    dec_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(dec_optimizer, patience=10, verbose=True)
 
     # Run the training and validation loops
     for epoch in range(start_epoch, start_epoch + num_epochs):
